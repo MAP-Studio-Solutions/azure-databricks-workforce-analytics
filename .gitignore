@@ -26,3 +26,6 @@ data/
 
 # OS
 Thumbs.db
+
+# Temp files
+_staging/

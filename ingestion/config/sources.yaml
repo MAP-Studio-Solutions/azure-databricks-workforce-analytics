@@ -1,0 +1,19 @@
+sources:
+  hr_events:
+    format: csv
+    landing_relpath: "hr_events/hr_events.csv"
+    bronze_table: "bronze_hr_events"
+    silver_table: "silver_hr_events"
+    keys: ["employee_id", "event_ts", "event_type"]
+  headcount_snapshots:
+    format: csv
+    landing_relpath: "headcount/headcount_snapshots.csv"
+    bronze_table: "bronze_headcount_snapshots"
+    silver_table: "silver_headcount_snapshots"
+    keys: ["snapshot_date", "employee_id"]
+  org:
+    format: csv
+    landing_relpath: "org/org.csv"
+    bronze_table: "bronze_org"
+    silver_table: "silver_org"
+    keys: ["org_id"]
