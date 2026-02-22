@@ -2,6 +2,12 @@
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python-envs.pythonProjects": [],
 
+    // Tell Pylance where your package root is
+    "python.analysis.extraPaths": [
+        "./",
+        "./workforce"
+    ],
+
     "[python]": {
         "diffEditor.ignoreTrimWhitespace": false,
         "editor.defaultColorDecorators": "never",

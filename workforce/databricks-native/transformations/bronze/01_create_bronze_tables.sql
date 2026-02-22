@@ -1,1 +1,0 @@
--- TODO: Create bronze Delta tables (Databricks SQL)
