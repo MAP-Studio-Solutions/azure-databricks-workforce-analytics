@@ -4,6 +4,16 @@
 %pip install pandas==2.2.1 PyYAML==6.0.1 faker==24.9.0
 
 # COMMAND ----------
+# Add repo_root to sys.path for imports
+import sys
+import os
+
+repo_root = "/Workspace/Users/matthew@2matthewalgergmail.onmicrosoft.com/modern-analytics-platforms-demo"
+if repo_root not in sys.path:
+    sys.path.append(repo_root)
+
+
+# COMMAND ----------
 # Imports and path configuration
 
 from workforce.databricks_native.ingestion.scripts.upload_to_landing import upload_to_landing
