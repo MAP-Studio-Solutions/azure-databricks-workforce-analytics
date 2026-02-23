@@ -145,3 +145,6 @@ def main():
     args, _ = parser.parse_known_args()
 
     generate_synth_data(args.out)
+
+if __name__ == "__main__": 
+    main()
