@@ -8,7 +8,7 @@ It demonstrates how this domain is executed using:
 - SQL transformations  
 - SCD Type 2 modeling  
 - point‑in‑time reconstruction  
-- Databricks Workflows orchestration  
+- Databricks Workflows orchestration (planned)  
 - Delta Lake ACID transactions and atomic commits  
 
 This README is the **authoritative, method‑specific execution guide**.  
@@ -23,25 +23,33 @@ It explains:
 
 ---
 
+```text
 ## Repository Layout (Method‑Specific)
 
+    workforce/
+      databricks_native/
+        README.md                     ← You are here
+        sql/
+          bronze/                     ← (Reserved; bronze is Python‑driven)
+          silver/                     ← SCD2 + PIT SQL (to be implemented)
+          gold/                       ← Dimensional + reporting SQL (to be implemented)
+        ingestion/
+          sources.yaml                ← Runtime metadata input
+          scripts/
+            config.py                 ← Loads YAML → SourceSpec
+            runner.py                 ← Executes ingestion
+            upload_to_landing.py      ← Uploads raw files to ADLS landing
+            generate_synth_data.py    ← Synthetic data generator
+          notebooks/
+            run_full_ingestion.py     ← Databricks‑native orchestrator notebook
+      docs/                           ← Human documentation (optional)
 ```
-workforce/
-  databricks-native/
-    README.md                ← You are here
-    sql/
-      bronze/                ← Raw → bronze ingestion SQL
-      silver/                ← SCD2 + PIT logic
-      gold/                  ← Dimensional + reporting models
-  ingestion/
-    config/
-      sources.yaml           ← Runtime metadata input
-    python/workforce_ingest/
-      config.py              ← Loads YAML → SourceSpec
-      runner.py              ← Executes ingestion
-      transformations/       ← Python helpers (optional)
-  docs/                      ← Human documentation (not executed)
-```
+
+**Notes:**
+- Bronze ingestion is **Python → Delta**, not SQL.  
+- Silver/Gold SQL folders are scaffolded for future modeling.  
+- `docs/` is optional and not used at runtime.
+
 
 ---
 
@@ -50,11 +58,12 @@ workforce/
 | Document | Used By | Purpose |
 |---------|---------|---------|
 | `sources.yaml` | Python ingestion | Defines landing paths, formats, bronze/silver tables, keys |
-| `config.py` | Python ingestion | Converts YAML → typed `SourceSpec` objects |
-| `runner.py` | Databricks job | Executes ingestion for each source |
-| `sql/bronze/*.sql` | Databricks SQL engine | Load raw → bronze |
-| `sql/silver/*.sql` | Databricks SQL engine | SCD2 + PIT logic |
-| `sql/gold/*.sql` | Databricks SQL engine | Final dimensional models |
+| `scripts/config.py` | Python ingestion | Converts YAML → typed `SourceSpec` objects |
+| `scripts/runner.py` | Databricks job/notebook | Executes ingestion for each source |
+| `scripts/upload_to_landing.py` | Python ingestion | Uploads raw files to ADLS landing |
+| `scripts/generate_synth_data.py` | Python ingestion | Generates synthetic CSVs |
+| `sql/silver/*.sql` | Databricks SQL engine | SCD2 + PIT logic (future) |
+| `sql/gold/*.sql` | Databricks SQL engine | Dimensional models (future) |
 | `docs/*.md` | Humans only | Architecture, modeling, explanations |
 
 Everything else is scaffolding.
@@ -63,53 +72,49 @@ Everything else is scaffolding.
 
 ## Execution Architecture (Databricks‑Native)
 
-This method uses **SQL‑first ELT** orchestrated by Databricks Workflows.
+This method uses **SQL‑first ELT** orchestrated by Databricks Workflows (planned) and executed today via a Databricks notebook.
 
 ### High‑Level Flow
 
-```
-sources.yaml
-    ↓
-config.py → SourceSpec objects
-    ↓
-runner.py (Databricks job)
-    ↓
-Bronze SQL (raw → bronze)
-    ↓
-Silver SQL (SCD2 + PIT)
-    ↓
-Gold SQL (dimensional models)
-```
+    sources.yaml
+        ↓
+    config.py → SourceSpec objects
+        ↓
+    runner.py (Databricks job/notebook)
+        ↓
+    Bronze ingestion (Python → Delta)
+        ↓
+    Silver SQL (SCD2 + PIT)   ← future
+        ↓
+    Gold SQL (dimensional)    ← future
 
 ---
 
 ## Detailed Ingestion Flow
 
 ### Metadata Loading
-```
-sources.yaml
-   └── defines:
-         - format
-         - landing_relpath
-         - bronze_table
-         - silver_table
-         - keys
-```
+
+    sources.yaml
+       └── defines:
+             - format
+             - landing_relpath
+             - bronze_table
+             - silver_table
+             - keys
 
 ### Python Ingestion Layer
-```
-config.py
-   └── load_sources_yaml()
-         └── creates dict[str, SourceSpec]
 
-runner.py
-   └── for each source in SOURCES:
-         └── executes bronze SQL
-```
+    config.py
+       └── load_sources_yaml()
+             └── creates dict[str, SourceSpec]
+
+    runner.py
+       └── for each source in SOURCES:
+             └── executes bronze ingestion (Python → Delta)
 
 ---
 
-### Storage Architecture (ADLS Gen2)
+## Storage Architecture (ADLS Gen2)
 
 **ADLS Gen2** is Azure Blob Storage with **hierarchical namespace enabled**.
 
@@ -124,27 +129,27 @@ Hierarchical namespace is **required** for reliable Delta Lake pipelines.
 
 ---
 
-### System Architecture Diagram
+## System Architecture Diagram
 
-```mermaid
-flowchart TD
-    subgraph Azure_Subscription["Azure Subscription"]
-        SA["Storage Account<br/>(ADLS Gen2 Enabled)"]
-        DB["Azure Databricks Workspace"]
-    end
+```Mermaid
+    flowchart TD
+        subgraph Azure_Subscription["Azure Subscription"]
+            SA["Storage Account<br/>(ADLS Gen2 Enabled)"]
+            DB["Azure Databricks Workspace"]
+        end
 
-    SA --> C["Container: workforce-analytics"]
+        SA --> C["Container: workforce-analytics"]
 
-    C --> L["landing/<br/>Raw source files"]
-    L --> B["bronze/<br/>Raw structured tables"]
-    B --> S["silver/<br/>Conformed events"]
-    S --> G["gold/<br/>SCD2 dimensions & facts"]
-    B --> CP["checkpoints/"]
+        C --> L["landing/<br/>Raw source files"]
+        L --> B["bronze/<br/>Raw structured tables"]
+        B --> S["silver/<br/>Conformed events"]
+        S --> G["gold/<br/>SCD2 dimensions & facts"]
+        B --> CP["checkpoints/"]
 
-    DB -->|reads/writes via ABFSS| L
-    DB -->|materializes Delta tables| B
-    DB -->|transforms| S
-    DB -->|serves analytics| G
+        DB -->|reads/writes via ABFSS| L
+        DB -->|materializes Delta tables| B
+        DB -->|transforms| S
+        DB -->|serves analytics| G
 ```
 
 ---
@@ -172,28 +177,30 @@ This is only possible with **ADLS Gen2 hierarchical namespace**.
 
 ```mermaid
 flowchart LR
-    W["Spark/Databricks Job"] --> T["Write data files<br/>(temp location)"]
-    T --> L["Write Delta commit intent<br/>_delta_log/00000.json"]
-    L --> R["Atomic commit (rename / publish)"]
-    R --> V["New table version visible<br/>(N → N+1)"]
-    V --> Q["Readers see consistent snapshot<br/>(old OR new)"]
 
-    %% Failure/retry path
-    T -->|failure| F["Job fails before commit"]
-    L -->|failure| F
-    F --> X["Temp files remain orphaned<br/>(not referenced by _delta_log)"]
-    X --> RR["Retry job safely"]
-    RR --> T
+        W["Spark/Databricks Job"] --> T["Write data files<br/>(temp location)"]
+        T --> L["Write Delta commit intent<br/>_delta_log/00000.json"]
+        L --> R["Atomic commit (rename / publish)"]
+        R --> V["New table version visible<br/>(N → N+1)"]
+        V --> Q["Readers see consistent snapshot<br/>(old OR new)"]
 
-    %% Notes on idempotency
-    RR -.-> I["Idempotency: only log-referenced files are 'real'"]
+        %% Failure/retry path
+        T -->|failure| F["Job fails before commit"]
+        L -->|failure| F
+        F --> X["Temp files remain orphaned<br/>(not referenced by _delta_log)"]
+        X --> RR["Retry job safely"]
+        RR --> T
+
+        %% Notes on idempotency
+        RR -.-> I["Idempotency: only log-referenced files are 'real'"]
+        
 ```
 
 ---
 
 ## Modeling Patterns (Silver → Gold)
 
-The Databricks‑Native method implements:
+The Databricks‑Native method implements (future work):
 
 - **SCD Type 2 dimensions**  
 - **Point‑in‑time reconstruction**  
@@ -220,7 +227,7 @@ Validation patterns include:
 - Primary‑key and surrogate‑key integrity checks  
 - Metric validation for headcount and events  
 
-These checks run as part of the gold‑layer workflows.
+These checks run as part of the gold‑layer workflows (future).
 
 ---
 
@@ -248,9 +255,9 @@ This keeps the system clean, governed, and maintainable.
 
 1. Clone the repo into Databricks Repos  
 2. Configure secrets + storage paths  
-3. Deploy workflows  
-4. Run ingestion (bronze)  
-5. Run transformations (silver → gold)  
+3. Run `run_full_ingestion.py` (bronze ingestion)  
+4. Implement and run silver SQL (SCD2 + PIT)  
+5. Implement and run gold SQL (dimensional models)  
 
 All transformations are deterministic and idempotent.
 
