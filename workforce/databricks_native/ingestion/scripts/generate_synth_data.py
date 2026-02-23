@@ -114,15 +114,8 @@ def gen_headcount_snapshots(emps, orgs, start_month=date(2023, 1, 1), months=36)
     return pd.DataFrame(rows)
 
 
-def main():
-    # Parse output directory argument
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument(
-        "--out", type=str, default="data", help="Output directory for generated CSVs"
-    )
-    args, _ = parser.parse_known_args()
-
-    out = Path(args.out)
+def generate_synth_data(out_dir: str) -> None:
+    out = Path(out_dir)
     ensure_dirs(out)
 
     # Generate dataframes for orgs, employees, events, and headcount
@@ -144,5 +137,11 @@ def main():
     print(f"- {out/'headcount'/'headcount_snapshots.csv'} ({len(hc_df)} rows)")
 
 
-if __name__ == "__main__":
-    main()
+def main():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--out", type=str, default="data", help="Output directory for generated CSVs"
+    )
+    args, _ = parser.parse_known_args()
+
+    generate_synth_data(args.out)
