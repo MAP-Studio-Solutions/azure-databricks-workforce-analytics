@@ -1,120 +1,189 @@
 # Workforce Analytics — Domain Overview
 
-The Workforce Analytics domain models the core entities, events, and historical changes that describe an organization’s employees over time.  
-It provides a governed, point‑in‑time view of the workforce suitable for reporting, BI consumption, and downstream analytics.
+This folder contains the complete implementation of the **Workforce Analytics domain**
+within a modern, serverless Azure Databricks analytics platform. The domain is organized
+into three clear layers:
 
-This README describes the **business domain**, **data model**, and **analytical outputs**.  
-Execution details are defined separately in each method folder.
+- **Ingestion Engine** — Python-based, metadata-driven ingestion → ADLS landing  
+- **Transformation Engine** — dbt + Serverless SQL Warehouse → UC Bronze/Silver/Gold  
+- **Semantic Engine** (optional) — Genie semantic layer for AI/metric access  
 
----
+This README explains:
 
-## Domain Purpose
-
-The Workforce domain answers foundational questions about an organization’s people:
-
-- How many employees do we have today?
-- How has headcount changed over time?
-- Which departments are growing or shrinking?
-- What events (hire, termination, transfer, promotion) drive those changes?
-- What is the historical composition of the workforce at any point in time?
-
-The domain is intentionally small but representative of real enterprise workforce systems.
+- The domain folder structure  
+- What each layer is responsible for  
+- How data flows from raw files → curated UC tables  
+- How this domain fits into the overall platform architecture  
 
 ---
 
-## Domain Entities
+## Domain Folder Structure
 
-### **Employee**
-The central entity representing a worker in the organization.  
-Attributes include:
-
-- employee_id  
-- name  
-- department  
-- job role  
-- manager  
-- employment status  
-- effective dates (for SCD2 history)
-
-### **Department**
-Organizational structure used for grouping and reporting.  
-Attributes include:
-
-- department_id  
-- department_name  
-- parent_department (optional)
-
-### **Job**
-Represents the employee’s role or position.  
-Attributes include:
-
-- job_id  
-- job_title  
-- job_family  
-- job_level
+```text
+workforce/
+  ingestion_engine/          ← Python ingestion (YAML-driven → ADLS landing)
+  transformation_engine/     ← dbt models (Bronze/Silver/Gold in UC)
+  semantic_engine/           ← Optional Genie semantic layer
+  docs/                      ← Human documentation (optional)
+  README.md                  ← You are here
+```
 
 ---
 
-## Domain Events
+# Ingestion Engine (Python → ADLS Landing)
 
-The domain models key workforce events that change the composition of the organization:
+The ingestion engine is responsible for **landing raw data** in ADLS Gen2.  
+It does **not** create Delta tables, does **not** require Spark, and does **not** use clusters.
 
-- **Hire**  
-- **Termination**  
-- **Transfer**  
-- **Promotion**  
-- **Compensation change**  
+### Responsibilities
+- Generate synthetic data (optional)
+- Read YAML metadata (`sources.yaml`)
+- Upload raw files to ADLS landing
+- Preserve folder structure and naming conventions
+- Remain cost-efficient and Databricks‑optional
 
-These events feed both SCD2 history and point‑in‑time headcount reconstruction.
+### Output
+```
+abfss://.../workforce/landing/<source_name>/...
+```
 
----
-
-## Gold‑Layer Data Model
-
-The Workforce domain produces a small but durable dimensional model.
-
-### **Dimensions**
-
-#### `dim_employee` (SCD Type 2)
-Tracks employee attributes over time using effective‑date logic.  
-Supports point‑in‑time reporting and historical reconstruction.
-
-#### `dim_date`
-Standard calendar dimension used for time‑series alignment.
-
-### **Facts**
-
-#### `fact_employee_events`
-A conformed event table representing hires, terminations, transfers, promotions, and compensation changes.
-
-#### `fact_headcount_snapshot`
-A point‑in‑time table that reconstructs workforce composition for any historical date.
+This is the **only output** of ingestion.
 
 ---
 
-## Modeling Patterns
+# Transformation Engine (dbt + Serverless SQL Warehouse → Unity Catalog)
 
-The Workforce domain uses:
+All medallion modeling is performed using **dbt** running on **Serverless SQL Warehouse**.
 
-- **SCD Type 2** for employee history  
-- **Point‑in‑time reconstruction** for headcount  
-- **Surrogate keys** for dimensional stability  
-- **Effective‑date logic** for historical accuracy  
-- **Event‑driven modeling** for workforce changes  
+### Responsibilities
+- Read raw files from ADLS landing
+- Create **Bronze** tables in Unity Catalog
+- Apply typing, deduplication, and incremental logic (**Silver**)
+- Build dimensional models and facts (**Gold**)
+- Enforce governance through Unity Catalog
 
-These patterns mirror real enterprise workforce analytics systems.
+### Output
+All curated tables live in UC:
+
+```
+catalog.schema.bronze_<table>
+catalog.schema.silver_<table>
+catalog.schema.gold_<table>
+```
+
+No Bronze/Silver/Gold folders exist in ADLS.
 
 ---
 
-## How This Domain Relates to Methods
+# Semantic Engine (Optional)
 
-This domain can be implemented using multiple execution methods:
+If enabled, the semantic engine provides:
 
-- **Databricks‑Native** (SQL‑first ELT)
-- **dbt‑Databricks** (model‑first DAG)
-- **Genie** (semantic‑layer‑first AI querying)
+- Genie semantic definitions  
+- Metric layers  
+- Business-friendly access to curated UC tables  
 
-Each method produces or consumes the **same gold‑layer model**, but uses a different execution approach.
+This layer is optional but recommended for AI/BI consumption.
 
-See the method folders for implementation details.
+---
+
+# Data Flow Diagram (Modern Architecture)
+
+```mermaid
+flowchart TD
+
+    subgraph Ingestion["Ingestion Engine"]
+        Y["sources.yaml"]
+        G["generate_synth_data.py"]
+        U["upload_to_landing.py"]
+    end
+
+    subgraph Storage["ADLS Gen2"]
+        L["landing/<br/>Raw files"]
+    end
+
+    subgraph Transform["Transformation Engine"]
+        BZ["Bronze (UC Tables)"]
+        SV["Silver (UC Tables)"]
+        GD["Gold (UC Tables)"]
+    end
+
+    subgraph Semantic["Semantic Layer"]
+        SM["Semantic Models"]
+    end
+
+    Y --> U --> L
+    G --> U
+    L --> BZ --> SV --> GD --> SM
+```
+
+---
+
+# Separation of Concerns
+
+- **Ingestion Engine** → Raw data only  
+- **Transformation Engine** → All SQL modeling  
+- **Semantic Engine** → Business/AI layer  
+- **Unity Catalog** → Governance + table storage  
+- **Serverless SQL Warehouse** → Compute  
+
+This separation ensures clarity, modularity, and cost efficiency.
+
+---
+
+# How to Run This Domain
+
+### 1. Run ingestion (Python, via Databricks notebook or locally)
+- (Optional) Generate synthetic data into a local/temp folder (e.g., `/tmp/workforce_synth`).
+- Use `upload_to_landing.py` (directly or via `run_ingestion`) to push files into ADLS landing:
+  - `abfss://.../workforce/landing/...`
+- Validate that landing paths and file structures match `sources.yaml`.
+
+### 2. Run dbt models (Serverless SQL Warehouse → Unity Catalog)
+- Point dbt at your Databricks Serverless SQL Warehouse.
+- Run `dbt run` to materialize Bronze → Silver → Gold tables in Unity Catalog.
+- Run `dbt test` to execute schema and data tests.
+- (Optional) Run `dbt docs generate` to build documentation.
+
+### 3. (Optional) Enable semantic layer
+- Configure Genie (or equivalent) semantic definitions over UC Gold tables.
+- Expose curated metrics and dimensions to BI/AI consumers.
+
+---
+
+# Design Philosophy
+
+This domain is built around a modern, cloud‑native analytics architecture that
+emphasizes clarity, governance, and long‑term maintainability. Each layer has a
+single responsibility, and the system avoids unnecessary infrastructure,
+complexity, or cost.
+
+Core principles:
+
+- **Thin, metadata‑driven ingestion**  
+  Ingestion is lightweight and deterministic, producing only raw files in ADLS
+  based on declarative YAML configuration.
+
+- **Serverless, SQL‑first transformations**  
+  All modeling is performed in dbt using Databricks Serverless SQL Warehouse,
+  ensuring predictable performance and pay‑per‑second efficiency.
+
+- **Unity Catalog as the system of record**  
+  All curated tables—Bronze, Silver, and Gold—are governed, discoverable, and
+  lineage‑tracked within Unity Catalog.
+
+- **Declarative, testable modeling with dbt**  
+  Transformations are version‑controlled, documented, and validated through dbt
+  tests, exposures, and incremental logic.
+
+- **Clear separation of concerns**  
+  Ingestion handles raw data movement; transformations handle modeling; the
+  semantic layer (optional) exposes business‑friendly metrics and definitions.
+
+- **Cost‑efficient, scalable architecture**  
+  No clusters, no idle compute, no unnecessary infrastructure. Everything is
+  serverless, modular, and designed to scale cleanly across domains.
+
+The goal is **clarity, durability, and correctness**—a platform that is easy to
+reason about, easy to extend, and easy to trust.
 

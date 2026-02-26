@@ -15,9 +15,9 @@ if repo_root not in sys.path:
 
 # COMMAND ----------
 # Imports and path configuration
-from workforce.databricks_native.ingestion.scripts.upload_to_landing import upload_to_landing
-from workforce.databricks_native.ingestion.scripts.runner import run_ingestion
-from workforce.databricks_native.ingestion.scripts.generate_synth_data import generate_synth_data
+from workforce.ingestion_engine.scripts.upload_to_landing import upload_to_landing
+from workforce.ingestion_engine.scripts.runner import run_ingestion
+from workforce.ingestion_engine.scripts.generate_synth_data import generate_synth_data
 
 # Local temp directory for synthetic data
 LOCAL_SYNTH_DATA = "/tmp/workforce_synth"
@@ -27,7 +27,7 @@ LANDING_PATH = "abfss://analytics@stanalyticsdl001.dfs.core.windows.net/workforc
 BRONZE_PATH  = "abfss://analytics@stanalyticsdl001.dfs.core.windows.net/workforce/bronze"
 
 # Path to metadata
-SOURCES_YAML = f"{repo_root}/workforce/databricks_native/ingestion/sources.yaml"
+SOURCES_YAML = f"{repo_root}/workforce/ingestion_engine/sources.yaml"
 
 # COMMAND ----------
 # Generate synthetic data into /tmp (local to the cluster)
